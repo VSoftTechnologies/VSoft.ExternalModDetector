@@ -1,0 +1,3 @@
+[submodule "FileSystemMonitor"]
+	path = FileSystemMonitor
+	url = https://github.com/pyscripter/FileSystemMonitor

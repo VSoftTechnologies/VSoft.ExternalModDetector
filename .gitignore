@@ -1,0 +1,8 @@
+*.dproj.local
+*.dsk
+*.~dsk
+*.identcache
+src/__history/
+src/Win32/
+src/Win64/
+src/VSoft.ExternalModDetector.res
