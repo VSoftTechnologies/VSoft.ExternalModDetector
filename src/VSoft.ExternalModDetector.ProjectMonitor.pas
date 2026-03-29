@@ -17,7 +17,7 @@ type
     FFileSystemMonitor : IFileSystemMonitor;
     FIDENotifierIndex : Integer;
     FWatchedDirectories : TDictionary<string, Integer>; // dir -> refcount
-    FPendingReloads : TDictionary<string, Boolean>;     // path -> pending
+    FPendingReloads : THashSet<string>;     // path -> pending
     FDebounceTimer : TTimer;
     FSuppressMonitoring : Boolean;
 
@@ -58,7 +58,7 @@ begin
   FIDENotifierIndex := -1;
   FFileSystemMonitor := CreateFileSystemMonitor;
   FWatchedDirectories := TDictionary<string, Integer>.Create;
-  FPendingReloads := TDictionary<string, Boolean>.Create;
+  FPendingReloads := THashSet<string>.Create;
 
   FDebounceTimer := TTimer.Create(nil);
   FDebounceTimer.Enabled := False;
@@ -153,7 +153,8 @@ begin
 
   if changeType in [fcModified, fcAdded] then
   begin
-    FPendingReloads.AddOrSetValue(normalizedPath, True);
+    if not FPendingReloads.Contains(normalizedPath) then
+      FPendingReloads.Add(normalizedPath);
     FDebounceTimer.Enabled := False;
     FDebounceTimer.Enabled := True;
     LogMessage('Change detected: ' + path);
@@ -173,7 +174,7 @@ var
 begin
   FSuppressMonitoring := True;
   try
-    pendingList := FPendingReloads.Keys.ToArray;
+    pendingList := FPendingReloads.ToArray;
     FPendingReloads.Clear;
 
     for filePath in pendingList do
@@ -335,18 +336,18 @@ var
   i : Integer;
   moduleInfo : IOTAModuleInfo;
   dir : string;
-  directories : TDictionary<string, Boolean>;
+  directories : THashSet<string>;
   projectDir : string;
 begin
   if project = nil then
     Exit;
 
-  directories := TDictionary<string, Boolean>.Create;
+  directories := THashSet<string>.Create;
   try
     // Always watch the project directory itself
-    projectDir := ExtractFilePath(project.FileName);
-    if (projectDir <> '') and DirectoryExists(projectDir) then
-      directories.AddOrSetValue(NormalizePath(projectDir), True);
+    projectDir := NormalizePath(ExtractFilePath(project.FileName));
+    if (projectDir <> '') and DirectoryExists(projectDir) and not (directories.Contains(projectDir)) then
+      directories.Add(projectDir);
 
     // Collect unique directories from project source files
     for i := 0 to project.GetModuleCount - 1 do
@@ -354,13 +355,13 @@ begin
       moduleInfo := project.GetModule(i);
       if moduleInfo.FileName <> '' then
       begin
-        dir := ExtractFilePath(moduleInfo.FileName);
-        if (dir <> '') and DirectoryExists(dir) then
-          directories.AddOrSetValue(NormalizePath(dir), True);
+        dir := NormalizePath(ExtractFilePath(moduleInfo.FileName));
+        if (dir <> '') and DirectoryExists(dir) and (not directories.Contains(dir)) then
+          directories.Add(dir);
       end;
     end;
 
-    for dir in directories.Keys do
+    for dir in directories do
       AddDirectoryWatch(dir);
   finally
     directories.Free;
@@ -374,30 +375,30 @@ var
   i : Integer;
   moduleInfo : IOTAModuleInfo;
   dir : string;
-  directories : TDictionary<string, Boolean>;
+  directories : THashSet<string>;
   projectDir : string;
 begin
   if project = nil then
     Exit;
 
-  directories := TDictionary<string, Boolean>.Create;
+  directories := THashSet<string>.Create;
   try
-    projectDir := ExtractFilePath(project.FileName);
-    if projectDir <> '' then
-      directories.AddOrSetValue(NormalizePath(projectDir), True);
+    projectDir := NormalizePath(ExtractFilePath(project.FileName));
+    if (projectDir <> '') and (not directories.Contains(projectDir)) then
+      directories.Add(projectDir);
 
     for i := 0 to project.GetModuleCount - 1 do
     begin
       moduleInfo := project.GetModule(i);
       if moduleInfo.FileName <> '' then
       begin
-        dir := ExtractFilePath(moduleInfo.FileName);
-        if dir <> '' then
-          directories.AddOrSetValue(NormalizePath(dir), True);
+        dir := NormalizePath(ExtractFilePath(moduleInfo.FileName));
+        if (dir <> '') and (not directories.Contains(dir)) then
+          directories.Add(dir);
       end;
     end;
 
-    for dir in directories.Keys do
+    for dir in directories do
       RemoveDirectoryWatch(dir);
   finally
     directories.Free;
