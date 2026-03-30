@@ -95,7 +95,7 @@ end;
 
 function TExternalModProjectMonitor.NormalizePath(const path : string) : string;
 begin
-  Result := LowerCase(ExpandFileName(path));
+  Result := ExpandFileName(path);
 end;
 
 procedure TExternalModProjectMonitor.LogMessage(const msg : string);
@@ -106,8 +106,15 @@ var
 begin
 {$IFDEF DEBUG}
   if Supports(BorlandIDEServices, IOTAMessageServices, messageServices) then
-    messageServices.AddTitleMessage('[ExternalModDetector] ' + msg);
-  OutputDebugString(PChar('[ExternalModDetector] ' + msg));
+  begin
+    TThread.Queue(nil,
+      procedure
+      begin
+        messageServices.AddTitleMessage('[ExternalModDetector] ' + msg);
+      end);
+  end;
+
+  //OutputDebugString(PChar('[ExternalModDetector] ' + msg));
 {$ENDIF}
 end;
 
@@ -224,11 +231,15 @@ var
 //  moduleInfo : IOTAModuleInfo;
 //  sourceModule : IOTAModule;
 begin
+  LogMessage('NotifyProjectFileChanged : ' + fileName);
   moduleServices := BorlandIDEServices as IOTAModuleServices;
   module := moduleServices.FindModule(fileName);
 
   if module = nil then
+  begin
+    LogMessage('Skipping file as module not found: ' + fileName);
     Exit;
+  end;
 
   // If the project file itself has unsaved changes, skip.
   if IsFileModifiedInEditor(fileName) then
